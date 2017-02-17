@@ -24,7 +24,7 @@ def synch(f, b=45, Tgal=10.12, beta=-2.55):
     return I
     
 def dust(f, tau_f0=14.5e-7, T=20.5, beta=1.59):
-    """Planck "southern cap" sky model dust."""
+    """Planck "southern cap" sky model dust from Planck 2013 XI, Table 3"""
     
     if type(f) is not u.quantity.Quantity:
         f=f*u.Hz
