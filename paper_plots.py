@@ -2,6 +2,7 @@
 import am_model as am
 import spec
 from matplotlib.pyplot import *
+from numpy import *
 import planck
 import foregrounds
 import snr
@@ -17,9 +18,13 @@ def paper_plots(fig):
 
     if fig==1:
         plot_total_foregrounds()
+
     if fig==2:
         plot_atm_byspecies()
 
+    if fig==3:
+        plot_sum_species_err()
+        
     return
 
 def plot_total_foregrounds():
@@ -28,23 +33,29 @@ def plot_total_foregrounds():
     # South Pole, .5 mm PWV
     p=am.readamcfile(amdir+'south_pole/SPole_winter.amc')
     p.Nscale['h2o']=500; p.T0=0
-    x=am.am(prof=p,fmin=0,fmax=10000,df=100)
-    x.callam()
-    sp=spec.spec(x.f,x.I)
+    x1=am.am(prof=p,fmin=0,fmax=1000,df=100)
+    x1.callam()
+    x2=am.am(prof=p,fmin=1000,fmax=10000,df=1000)
+    x2.callam()
+    sp=spec.spec(hstack((x1.f,x2.f)), hstack((x1.I,x2.I)))
 
     # Mauna Kea, 1.86 mm PWV
     p=am.readamcfile(amdir+'mk_no_upperstratosphere.amc')
     p.T0=0
-    x=am.am(prof=p,fmin=0,fmax=10000,df=100)
-    x.callam()
-    mk=spec.spec(x.f,x.I)
+    x1=am.am(prof=p,fmin=0,fmax=1000,df=100)
+    x1.callam()
+    x2=am.am(prof=p,fmin=1000,fmax=10000,df=1000)
+    x2.callam()
+    mk=spec.spec(hstack((x1.f,x2.f)), hstack((x1.I,x2.I)))
 
     # Balloon
     p=am.readamcfile(amdir+'o3_only_stratosphere.amc')
     p.T0=0
-    x=am.am(prof=p,fmin=0,fmax=10000,df=100)
-    x.callam()
-    ba=spec.spec(x.f,x.I)
+    x1=am.am(prof=p,fmin=0,fmax=1000,df=100)
+    x1.callam()
+    x2=am.am(prof=p,fmin=1000,fmax=10000,df=1000)
+    x2.callam()
+    ba=spec.spec(hstack((x1.f,x2.f)), hstack((x1.I,x2.I)))
 
     # Get recombination lines
     xx=np.loadtxt('recomb_spec/HI.HeI.HeII.dat');
@@ -55,12 +66,12 @@ def plot_total_foregrounds():
     cmb=spec.spec(sp.f,I.value)
 
     # Plot total background
-    synch15=foregrounds.synch(sp.f*u.GHz,15)
-    synch90=foregrounds.synch(sp.f*u.GHz,90)
+    synch15=(foregrounds.synch(sp.f*u.GHz,15)).value
+    synch90=(foregrounds.synch(sp.f*u.GHz,90)).value
 
     # Dust frm Planck 2013 XI, Table 3 and Fig 14
-    dust_upper=foregrounds.dust(sp.f*u.GHz, tau_f0=18.5e-7) # Eyeballed off Fig 14,
-    dust_lower=foregrounds.dust(sp.f*u.GHz, tau_f0=6.4e-7) # Lowest 1% of sky
+    dust_upper=(foregrounds.dust(sp.f*u.GHz, tau_f0=18.5e-7)).value # Eyeballed off Fig 14,
+    dust_lower=(foregrounds.dust(sp.f*u.GHz, tau_f0=6.4e-7)).value # Lowest 1% of sky
 
     close(1)
     fig=figure(1,figsize=(7,6))    
@@ -94,9 +105,6 @@ def plot_atm_byspecies():
 
     # Loop over species
     sp=p.Nscale.keys()
-
-    # This is zero everywhere
-    #sp.remove('h2o_optical_refractivity')
 
     #########
     # Run am
@@ -145,3 +153,84 @@ def plot_atm_byspecies():
     legend(h,l,loc='lower right',ncol=2)
 
     fig.savefig('atm_by_species.pdf',format='pdf')
+
+
+def plot_sum_species_err():
+    # Plot the fractional error of spectrum from sum of species vs. total
+    # computation.
+
+    p=am.readamcfile(amdir+'o3_thermo.amc')
+    p.T0=0
+    x=am.am(prof=p,fmin=0,fmax=20,df=20)
+    x.callam()
+    stot = spec.spec(x.f,x.I)
+
+    p=am.readamcfile(amdir+'o3_thermo.amc')
+    p.T0=0
+    p.splitlayers();
+    p.Nscale={};
+    p.addallnscales()
+
+    # Am configuration file
+    x=am.am(prof=p,fmin=0,fmax=20,df=20)
+
+    # Loop over species
+    sp=p.Nscale.keys()
+
+    #########
+    # Run am
+    s=[]
+    for k in sp:
+        p.setnscales(0.0)
+        p.Nscale[k]=1
+        x.callam()
+        s.append(spec.spec(x.f,x.I)) # spectral radiance
+
+    ssum = spec.spec(x.f, zeros(x.f.shape))
+    for k,val in enumerate(s):
+        ssum.I = ssum.I + val.I
+
+    # Plot
+    close(3)
+    fig = figure(3,figsize=(6,6))
+
+    plot(ssum.f, (ssum.I-stot.I)/stot.I, linewidth=2)
+    xlabel('frequency (GHz)')
+    ylabel(r'$(\Sigma I_{i} - I)/I$')
+    grid('on')
+    tight_layout()
+
+    fig.savefig('sum_species_err.pdf',format='pdf')
+
+
+def plot_2to4():
+
+    # Get MK atmosphere
+    p=am.readamcfile(amdir+'o3_thermo.amc')
+    p.T0=0
+    p.splitlayers();
+    p.Nscale={};
+    p.addallnscales()
+    x=am.am(prof=p,fmin=2,fmax=4, df=0.01)
+    #########
+    # Run am
+    s=[]
+    for k in sp:
+        p.setnscales(0.0)
+        p.Nscale[k]=1
+        x.callam()
+        s.append(spec.spec(x.f,x.I)) # spectral radiance
+
+    mk = spec.spec(x.f, zeros(x.f.shape))
+    for k,val in enumerate(s):
+        mk.I = mk.I + val.I
+
+    
+    # Get recombination lines
+    xx=np.loadtxt('recomb_spec/HI.HeI.HeII.dat');
+    r=spec.spec(xx[:,0],xx[:,1]); # spectral radiance
+
+    # Polyfit
+    porder = 4
+    mk.polyfit(order=porder, fmin=2, fmax=4)
+    r.polyfit(order=porder, fmin=2, fmax=4)
